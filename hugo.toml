@@ -25,8 +25,11 @@ theme = 'PaperMod'
   tocopen = false
 
   [params.homeInfoParams]
-    Title = "Latency Log"
+    Title = ""
     Content = """
+<div style="display: flex; align-items: start; gap: 2rem;">
+<div style="flex: 1;">
+
 Hi, I'm **Basil Eldho**. 
 
 I write about distributed systems, Go, and backend engineering.
@@ -38,6 +41,12 @@ I write about distributed systems, Go, and backend engineering.
 - Writing about system internals and technical challenges
 
 *Last updated: December 2025*
+
+</div>
+<div style="flex-shrink: 0;">
+<img src="/logo.svg" alt="Basil Eldho" width="200" height="200" style="border-radius: 8px;" />
+</div>
+</div>
 """
 
   [[params.socialIcons]]
@@ -53,7 +62,7 @@ I write about distributed systems, Go, and backend engineering.
     url = "mailto:basileljol@gmail.com"
 
   [[params.socialIcons]]
-    name = "cv"
+    name = "Resume"
     url = "https://drive.google.com/file/d/13Fj68DJEmBcoSRQ6tzREr_7bScI42L0U/view"
 
 [markup]
