@@ -1,0 +1,16 @@
+{{ define "main" }}
+<section>
+  {{ $byYear := .Pages.GroupByDate "2006" }}
+  {{ range $byYear }}
+  <div class="year-group">
+    <div class="year-label">{{ .Key }}</div>
+    {{ range .Pages }}
+    <div class="post-row">
+      <span class="post-date">{{ .Date.Format "2006-01-02" }}</span>
+      <a href="{{ .Permalink }}">{{ .Title }}</a>
+    </div>
+    {{ end }}
+  </div>
+  {{ end }}
+</section>
+{{ end }}

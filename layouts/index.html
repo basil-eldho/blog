@@ -1,0 +1,56 @@
+{{ define "main" }}
+<div class="home-layout">
+
+  <div class="posts-section">
+    {{ $posts := where .Site.RegularPages "Section" "posts" }}
+    {{ $byYear := $posts.GroupByDate "2006" }}
+    {{ range $byYear }}
+    <div class="year-group">
+      <div class="year-label">{{ .Key }}</div>
+      {{ range .Pages }}
+      <div class="post-row">
+        <span class="post-date">{{ .Date.Format "2006-01-02" }}</span>
+        <a href="{{ .Permalink }}">{{ .Title }}</a>
+      </div>
+      {{ end }}
+    </div>
+    {{ end }}
+  </div>
+
+  <aside class="sidebar">
+    <span class="bio-name">{{ .Site.Params.author }}</span>
+    <div class="bio-links">
+      <a href="{{ .Site.Params.github }}" target="_blank" rel="noopener">GitHub</a>
+      <a href="{{ .Site.Params.linkedin }}" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="{{ .Site.Params.email }}">Email</a>
+      <a href="{{ .Site.Params.resume }}" target="_blank" rel="noopener">Resume</a>
+    </div>
+
+    <p class="short-bio">{{ .Site.Params.shortBio }}</p>
+
+    {{ with .Site.Params.belief }}
+    <p class="bio-belief">{{ . }}</p>
+    {{ end }}
+
+    {{ with .Site.Params.now }}
+    <div class="now">
+      <div class="sidebar-label">Now</div>
+      {{ with .reading }}
+      <div class="now-row">
+        <span class="now-key">reading</span>
+        <span class="now-val">{{ . }}</span>
+      </div>
+      {{ end }}
+      {{ with .building }}
+      <div class="now-row">
+        <span class="now-key">building</span>
+        <span class="now-val">{{ . }}</span>
+      </div>
+      {{ end }}
+    </div>
+    {{ end }}
+
+  </aside>
+
+</div>
+{{ end }}

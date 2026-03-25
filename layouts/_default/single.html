@@ -1,0 +1,251 @@
+{{ define "main" }}
+<article>
+  <header class="post-header">
+    <h1 class="post-title">{{ .Title }}</h1>
+    <div class="post-meta">
+      <time>{{ .Date.Format "2006-01-02" }}</time>{{ with .Params.readTime }} · {{ . }}{{ end }}
+    </div>
+  </header>
+  <div class="post-content">
+    {{ .Content }}
+  </div>
+</article>
+<a href="/" class="back-link">← home</a>
+
+<div class="comments-wrap">
+
+  <div class="reactions-bar" id="reactions-bar"></div>
+
+  <div class="comment-form-card">
+    <div id="reply-indicator"></div>
+    <form id="comment-form">
+      <input type="text" id="c-name" placeholder="Your name" required maxlength="60" autocomplete="off">
+      <textarea id="c-body" placeholder="Add a comment…" required maxlength="2000" rows="3"></textarea>
+      <div class="form-footer">
+        <button type="button" id="cancel-reply">Cancel</button>
+        <button type="submit">Submit</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="comments-header-row">
+    <span id="responses-header">Comments</span>
+  </div>
+
+  <div id="comments-list"></div>
+
+</div>
+
+<script>
+const SB_URL = '{{ .Site.Params.supabaseUrl }}';
+const SB_KEY = '{{ .Site.Params.supabaseAnonKey }}';
+const SLUG   = '{{ .RelPermalink }}';
+const EMOJIS = ['👍', '❤️', '💡', '🔥'];
+
+const H = {
+  'apikey': SB_KEY,
+  'Authorization': 'Bearer ' + SB_KEY,
+  'Content-Type': 'application/json'
+};
+
+async function sbGet(table, query) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, { headers: H });
+  return r.json();
+}
+
+async function sbPost(table, body) {
+  await fetch(`${SB_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { ...H, 'Prefer': 'return=minimal' },
+    body: JSON.stringify(body)
+  });
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function timeAgo(iso) {
+  const m = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (m < 1)  return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function avatarColor(name) {
+  const p = ['#0d9488','#7c6b4e','#5a7a6e','#8b6914','#6b5a7a'];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + h * 31;
+  return p[Math.abs(h) % p.length];
+}
+
+// --- Reactions ---
+
+async function renderReactions() {
+  const data = await sbGet('reactions', `post_slug=eq.${encodeURIComponent(SLUG)}&select=emoji`);
+  const counts = {};
+  EMOJIS.forEach(e => counts[e] = 0);
+  data.forEach(r => { if (r.emoji in counts) counts[r.emoji]++; });
+
+  const bar = document.getElementById('reactions-bar');
+  bar.innerHTML = EMOJIS.map(e =>
+    `<button class="reaction-btn" data-emoji="${esc(e)}">
+      <span>${e}</span><span class="reaction-count">${counts[e] || ''}</span>
+    </button>`
+  ).join('');
+
+  bar.querySelectorAll('.reaction-btn').forEach(btn => {
+    const key = `r_${SLUG}_${btn.dataset.emoji}`;
+    if (localStorage.getItem(key)) btn.classList.add('reacted');
+    btn.addEventListener('click', async () => {
+      if (localStorage.getItem(key)) {
+        btn.classList.add('shake');
+        btn.addEventListener('animationend', () => btn.classList.remove('shake'), { once: true });
+        return;
+      }
+      localStorage.setItem(key, '1');
+      btn.classList.add('reacted');
+      await sbPost('reactions', { post_slug: SLUG, emoji: btn.dataset.emoji });
+      renderReactions();
+    });
+  });
+}
+
+// --- Comments ---
+
+let replyTo = null;
+
+function getVoted(id)      { return localStorage.getItem('v_' + id); }
+function setVoted(id, type){ localStorage.setItem('v_' + id, type); }
+
+function renderThread(byParent, votesMap, parentId, depth) {
+  return (byParent[parentId] || []).map(c => {
+    const initial = c.name.charAt(0).toUpperCase();
+    const color   = avatarColor(c.name);
+    const votes   = votesMap[c.id] || { up: 0, down: 0 };
+    const voted   = getVoted(c.id);
+    return `
+    <div class="comment-row${depth > 0 ? ' comment-reply' : ''}">
+      ${depth > 0 ? '<div class="reply-line"></div>' : ''}
+      <div class="c-avatar" style="background:${color}">${initial}</div>
+      <div class="comment-content">
+        <div class="comment-meta">
+          <span class="comment-name">${esc(c.name)}</span>
+          <span class="comment-date">${timeAgo(c.created_at)}</span>
+        </div>
+        <div class="comment-body">${esc(c.body)}</div>
+        <div class="comment-actions">
+          <button class="vote-btn up-btn${voted === 'up' ? ' voted' : ''}" data-id="${esc(c.id)}" data-type="up">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/><path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>
+            <span class="up-count">${votes.up}</span>
+          </button>
+          <button class="vote-btn down-btn${voted === 'down' ? ' voted' : ''}" data-id="${esc(c.id)}" data-type="down">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/></svg>
+            <span class="down-count">${votes.down}</span>
+          </button>
+          <button class="reply-btn" data-id="${esc(c.id)}" data-name="${esc(c.name)}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            Reply
+          </button>
+        </div>
+        ${renderThread(byParent, votesMap, c.id, depth + 1)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function renderComments() {
+  const data = await sbGet('comments',
+    `post_slug=eq.${encodeURIComponent(SLUG)}&order=created_at.desc&select=*`
+  );
+
+  document.getElementById('responses-header').innerHTML =
+    `Comments <span class="comment-count">${data.length}</span>`;
+
+  const list = document.getElementById('comments-list');
+  if (!data.length) {
+    list.innerHTML = '<p class="no-comments">No comments yet. Be the first.</p>';
+    return;
+  }
+
+  const ids = data.map(c => `"${c.id}"`).join(',');
+  const votesRaw = await sbGet('comment_votes', `comment_id=in.(${ids})&select=comment_id,vote_type`);
+  const votesMap = {};
+  votesRaw.forEach(v => {
+    if (!votesMap[v.comment_id]) votesMap[v.comment_id] = { up: 0, down: 0 };
+    votesMap[v.comment_id][v.vote_type]++;
+  });
+
+  const byParent = {};
+  data.forEach(c => {
+    const key = c.parent_id || 'root';
+    (byParent[key] = byParent[key] || []).push(c);
+  });
+
+  list.innerHTML = renderThread(byParent, votesMap, 'root', 0);
+
+  list.querySelectorAll('.vote-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id   = btn.dataset.id;
+      const type = btn.dataset.type;
+      if (getVoted(id)) return;
+      setVoted(id, type);
+      await sbPost('comment_votes', { comment_id: id, vote_type: type });
+      const countEl = btn.querySelector(type === 'up' ? '.up-count' : '.down-count');
+      countEl.textContent = parseInt(countEl.textContent || 0) + 1;
+      btn.classList.add('voted');
+      btn.closest('.comment-actions').querySelectorAll('.vote-btn').forEach(b => b.disabled = true);
+    });
+  });
+
+  list.querySelectorAll('.reply-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      replyTo = btn.dataset.id;
+      const el = document.getElementById('reply-indicator');
+      el.textContent = `↩ Replying to ${btn.dataset.name}`;
+      el.style.display = 'block';
+      document.getElementById('cancel-reply').style.display = 'inline';
+      document.getElementById('c-body').focus();
+    });
+  });
+}
+
+document.getElementById('cancel-reply').addEventListener('click', () => {
+  replyTo = null;
+  document.getElementById('reply-indicator').style.display = 'none';
+  document.getElementById('cancel-reply').style.display = 'none';
+});
+
+document.getElementById('comment-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = document.getElementById('c-name').value.trim();
+  const body = document.getElementById('c-body').value.trim();
+  if (!name || !body) return;
+
+  const btn = e.target.querySelector('[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  await sbPost('comments', { post_slug: SLUG, name, body, parent_id: replyTo });
+
+  document.getElementById('c-name').value = '';
+  document.getElementById('c-body').value = '';
+  replyTo = null;
+  document.getElementById('reply-indicator').style.display = 'none';
+  document.getElementById('cancel-reply').style.display = 'none';
+  btn.disabled = false;
+  btn.textContent = 'Submit';
+
+  renderComments();
+});
+
+renderReactions();
+renderComments();
+</script>
+{{ end }}
